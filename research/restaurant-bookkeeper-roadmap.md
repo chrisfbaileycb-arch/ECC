@@ -128,18 +128,57 @@ Known prototype simplifications to fix during porting:
 - Multi-state tax matrix (production is Colorado-only today)
 - Mobile companion (mockups exist; build after web console matures)
 
-## Evaluation Criteria for Powabase
+## Platform Candidates (Phase 2 decision)
 
-Press on these when real doc access is available (site was unreachable from
-the dev environment; knowledge is from third-party sources):
+Three candidates under evaluation. All three sites are unreachable from the
+dev environment (network policy); knowledge is from search results and
+third-party reviews — verify hands-on before committing.
 
-1. Agent runtime: scheduled triggers, tool-calling into our API,
-   human-approval steps, notification hooks
-2. Postgres access model: migrations, RLS, connection pooling
+### Powabase — integrated AI backend
+
+Postgres + pgvector, auth, storage, OCR/RAG pipeline, in-platform agent
+runtime, visual workflows. Strongest on document ingestion (invoice OCR) and
+hosted agent orchestration. Unknowns: pricing, maturity, lock-in.
+
+### AppDeploy (appdeploy.ai) — chat-native web runtime
+
+MCP-native deploy target: Claude Code deploys and iterates directly. Managed
+hosting, database, auth, file storage, secrets, scheduled jobs, real-time
+sync, custom domains, version rollback, code export (no source lock-in).
+Closest analog to the current Hatchable runtime, with the key advantage that
+the agent workflow (Claude via MCP) is first-class. Positioned for internal
+tools / lightweight SaaS; flagged weak for compliance-heavy production.
+Must verify before adopting: raw SQL/migration control (our migrations are
+plain Postgres), multi-tenant isolation/RLS, Stripe webhook signature
+verification, database (not just code) export, production SLAs.
+
+### Expo / EAS — the mobile companion (Phase 4)
+
+Not a backend candidate; it is the answer to the dual-interface vision's
+mobile half. React Native + EAS build/submit/update, official MCP server and
+documented Claude Code integration (docs.expo.dev/agents/claude). Industry
+standard; low-risk default choice for the mobile app whenever Phase 4 starts.
+
+### Working conclusion
+
+AppDeploy and Expo are complementary (web runtime + mobile app), not a
+Powabase replacement pair. If the agent is Claude-over-MCP rather than an
+in-platform runtime, Powabase's remaining differentiator is the OCR/RAG
+pipeline — which could instead be a point service (document-AI API) behind
+our own endpoints. Decision path: trial-deploy a slice of the production app
+to AppDeploy via MCP and test the five verification items above; keep the
+engine portable (pure lib/ + thin db gateway) so no candidate becomes
+load-bearing before it earns it.
+
+### Evaluation criteria (any backend candidate)
+
+1. Agent workflow: MCP/tool access for deploy + iterate, scheduled triggers,
+   notification hooks
+2. Postgres access model: raw SQL migrations, RLS, connection pooling
 3. Auth service: fit with the org_user/workspace model
-4. OCR/document pipeline quality on vendor invoices
-5. Self-host option and pricing at 10/100/1000 locations
-6. Data export / lock-in posture
+4. Document pipeline (or clean slot for an external OCR service)
+5. Pricing at 10/100/1000 locations; production support tier
+6. Data export (code AND database) / lock-in posture
 
 ## Open Items
 
