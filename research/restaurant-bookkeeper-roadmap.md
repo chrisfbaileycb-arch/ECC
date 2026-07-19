@@ -1,0 +1,150 @@
+# Restaurant Bookkeeper — Product Roadmap & Merge Plan
+
+Working document for the Restaurant Bookkeeper platform (Signal F portfolio).
+Consolidates the gap analysis between the two existing codebases and sets the
+build order for upcoming development runs. Last updated: 2026-07-19.
+
+## Scope Decision Log
+
+| Date | Decision |
+|---|---|
+| 2026-07-19 | **Payroll execution is OUT of scope.** No money movement, no direct deposit origination, no tax deposits, no filings. Restaurants keep their third-party payroll service (Gusto, ADP, Paychex). We **import** their payroll journal reports and post the entries — the same relationship most independent bookkeepers have with payroll today. This avoids Money Transmitter Licensing, NACHA obligations, and filing liability entirely. |
+| 2026-07-19 | Production platform base is the `restaurant-bookkeeper-in-a-box` repo (double-entry engine, tenancy, billing, compliance calendar). The Python `restaurant_accounting_poc_v5` prototype is the **feature specification** to port from — not a second codebase to maintain. |
+| 2026-07-19 | Target backend: evaluating Powabase (Postgres + agent runtime + workflows + OCR/RAG) as the landing platform, replacing the Hatchable runtime. Decision pending real access to Powabase docs. |
+
+## Positioning
+
+Anti-QuickBooks-bloat: a bookkeeping platform that does **only** what a food &
+beverage operation needs, end to end, with an AI agent orchestrating the
+recurring workflows. No accounts receivable, no perpetual FIFO inventory, no
+multi-currency, no generic invoicing. Value proposition: replaces the outside
+bookkeeper and the month-end cleanup, produces a tax-ready package at year end.
+Payroll stays with the customer's existing payroll service; we record it.
+
+## Current State — Two Complementary Codebases
+
+### Production repo (`chrisfbaileycb-arch/restaurant-bookkeeper-in-a-box`)
+
+The platform. JS/Hatchable runtime, central Postgres.
+
+- Multi-tenant model: organization → location → org_user → workspace, single
+  isolation chokepoint (`lib/tenant.js getContext()`), plan-tier enforcement
+  (Single $149 / Group $249 / Premium Group $499)
+- Double-entry ledger with all-or-nothing balance validation; balances always
+  computed from journal lines (audit-safe)
+- 42-account flat restaurant COA copied per organization
+- Strict 16-column POS CSV contract: sanitization, per-location dedup,
+  cadence watchdog
+- Reports: P&L (food/bev cost KPIs), balance sheet (integrity check), COGS,
+  CSV export
+- Check reconciliation: register vs. cleared matching, mismatch statuses,
+  discrepancy report, reconciliation summary tied to ledger cash
+- Compliance calendar: CO (DR 0100, DR 1094, FAMLI, UITR-1) + federal
+  (941/940) with due dates, statuses, estimated amounts from liability
+  balances, daily cron
+- QuickBooks export bridges (QBO journal CSV, IIF), month-scoped
+- Stripe billing paywall, 428-disclaimer acknowledgment pattern for
+  high-stakes actions
+
+### Prototype (`restaurant_accounting_poc_v5.py`, Google Drive)
+
+The feature spec. Python/SQLite, verified working end-to-end pipeline.
+
+Modules the production repo does NOT have (port order below):
+
+1. **AP subledger** — invoice ingestion with rule-based line categorization
+   to COGS child accounts, aging bins (0–15/16–30/31+), payment settlement
+   with optional check linkage
+2. **Third-party delivery reconciliation** — DoorDash/UberEats/Grubhub payout
+   statements: gross sales, commissions, promotions, refunds, net payout,
+   with correct journal treatment (refunds as contra-sales)
+3. **Payroll journal import** — Gusto/ADP report ingestion: BOH/FOH wage
+   split, employer taxes, single ACH sweep entry (this stays IN scope;
+   execution does not)
+4. **Bank-deposit clearing matching** — CC settlements and safe drops matched
+   to clearing accounts, merchant fee isolation (extends the existing
+   checks-only matcher)
+5. **Physical inventory adjustments** — periodic counts posted as COGS
+   corrections against inventory asset accounts
+6. **Prime cost metrics** — COGS% + labor% with 65% threshold warnings
+   (depends on payroll import)
+7. **Hierarchical COA with tax-line mapping** — parent/child rollups
+   (5000/5010 COGS families) and per-account 1120-S / 1125-A / Sch L line
+   mapping — the seed of the year-end tax package
+8. **Per-POS parsers** — Toast/Clover/Square daily summary formats, cash
+   drawer over/short, till payouts, gift-card deferred revenue
+9. **Comparative period statements**
+
+Known prototype simplifications to fix during porting:
+
+- "OCR" invoice scanning is a keyword parser over pre-structured text (real
+  OCR is an integration, likely Powabase's pipeline)
+- "Plaid" matching is a CSV simulation on description keywords (real Plaid is
+  an integration: OAuth, tokens, webhooks)
+- POS food/beverage splits are hardcoded ratios (80/20, 75/25) — must come
+  from actual POS category data
+- Denormalized `balances` table can drift — keep production's
+  compute-from-journal approach
+- Parsers lack validation (`float()` on raw input) — port onto production's
+  all-or-nothing validation pattern
+
+## Build Order
+
+### Phase 1 — Engine parity (port prototype features into production repo)
+
+1. COA migration: hierarchical accounts + `tax_line` column (everything else
+   builds on it)
+2. AP subledger (schema + categorization rules + aging + payment)
+3. Payroll journal import (unblocks compliance-calendar liabilities and prime
+   cost)
+4. Delivery platform reconciler
+5. Bank-deposit clearing matcher (extend `lib/checks.js` engine)
+6. Inventory adjustments + prime cost KPIs + comparative statements
+7. Per-POS normalizers (Toast/Clover/Square → 16-column contract)
+
+### Phase 2 — Platform move (pending Powabase evaluation)
+
+- Runtime adapter: `hatchable` SDK gateway → Postgres client + platform auth
+- RLS on the (already RLS-ready) schema
+- Cron → scheduled workflows
+- Billing: align `lib/billing.js` (flat $149) with the three plan tiers
+  defined in `lib/tenant.js`
+
+### Phase 3 — The agent layer
+
+- Expose engine functions as agent tools: post entries, run reports,
+  reconciliation, compliance status, AP aging
+- Recurring orchestration: daily sales posting, weekly delivery + payroll
+  imports, bank matching, month-end close checklist
+- Human approval gates on all posting actions (reuse the 428-ack pattern)
+- Document ingestion: real invoice/receipt OCR via platform pipeline
+- Alerting: prime cost threshold, compliance due dates, cadence watchdog
+  misses, reconciliation differences
+
+### Phase 4 — Integrations & polish
+
+- Plaid (real): bank feeds replacing bank CSV import
+- Year-end tax package export (tax-line rollups from Phase 1 COA work)
+- Multi-state tax matrix (production is Colorado-only today)
+- Mobile companion (mockups exist; build after web console matures)
+
+## Evaluation Criteria for Powabase
+
+Press on these when real doc access is available (site was unreachable from
+the dev environment; knowledge is from third-party sources):
+
+1. Agent runtime: scheduled triggers, tool-calling into our API,
+   human-approval steps, notification hooks
+2. Postgres access model: migrations, RLS, connection pooling
+3. Auth service: fit with the org_user/workspace model
+4. OCR/document pipeline quality on vendor invoices
+5. Self-host option and pricing at 10/100/1000 locations
+6. Data export / lock-in posture
+
+## Open Items
+
+- Master proposal Google Doc not accessible via connector (ID returns
+  not-found) — re-share needed
+- Five dashboard mockup PNGs not yet reviewed against the build order
+- Embedded payroll research retained for reference only (out of scope per
+  decision log)
