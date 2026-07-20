@@ -92,15 +92,22 @@ Known prototype simplifications to fix during porting:
 
 ### Phase 1 — Engine parity (port prototype features into production repo)
 
-1. COA migration: hierarchical accounts + `tax_line` column (everything else
-   builds on it)
-2. AP subledger (schema + categorization rules + aging + payment)
-3. Payroll journal import (unblocks compliance-calendar liabilities and prime
-   cost)
-4. Delivery platform reconciler
-5. Bank-deposit clearing matcher (extend `lib/checks.js` engine)
-6. Inventory adjustments + prime cost KPIs + comparative statements
-7. Per-POS normalizers (Toast/Clover/Square → 16-column contract)
+STATUS 2026-07-20: **COMPLETE** — all seven items built as stacked draft PRs
+on Restaurant-Bookkeeper-In-A-Box (#1 → #6, merge in order). Migrations
+0006–0011; each module has functional tests (balanced-entry + rejection
+paths) pending the in-repo test suite.
+
+1. ✅ COA migration: hierarchical accounts + `tax_line` column (PR #1)
+2. ✅ AP subledger: categorization rules + aging + payment recording (PR #2)
+3. ✅ Payroll journal import + prime cost KPIs — feeds compliance-calendar
+   liabilities; net-pay reconciliation enforced (PR #3)
+4. ✅ Delivery platform reconciler — enforced payout identity, contra-revenue
+   refunds, take rates (PR #4)
+5. ✅ Bank feed matching — deposit clearing with merchant-fee isolation,
+   check routing, unmatched queue never auto-posts (PR #5)
+6. ✅ Inventory adjustments + comparative statements (PR #6)
+7. ✅ POS daily-summary normalizers — real category splits, drawer
+   over/short; v5's hardcoded 80/20 ratio deliberately NOT ported (PR #6)
 
 ### Phase 2 — Platform move (pending Powabase evaluation)
 
